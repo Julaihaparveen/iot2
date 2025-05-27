@@ -1,21 +1,11 @@
 <?php
-require 'config.php';
-
-echo "<h2>Database Connection Test</h2>";
-
-try {
-    // Test query
-    $stmt = $pdo->query("SELECT current_database(), current_user, version()");
-    $result = $stmt->fetch(PDO::FETCH_ASSOC);
-
-    echo "<p style='color: green;'>✅ Connected to database successfully!</p>";
-    echo "<ul>";
-    echo "<li><strong>Database:</strong> " . htmlspecialchars($result['current_database']) . "</li>";
-    echo "<li><strong>User:</strong> " . htmlspecialchars($result['current_user']) . "</li>";
-    echo "<li><strong>PostgreSQL Version:</strong> " . htmlspecialchars($result['version']) . "</li>";
-    echo "</ul>";
-} catch (PDOException $e) {
-    echo "<p style='color: red;'>❌ Connection failed: " . htmlspecialchars($e->getMessage()) . "</p>";
+include 'config.php';
+ 
+echo "<h2>PostgreSQL Connection Test</h2>";
+ 
+if ($conn) {
+    echo "<p style='color: green;'>✅ Connected successfully to database <strong>IOT2</strong>.</p>";
+} else {
+    echo "<p style='color: red;'>❌ Failed to connect to database.</p>";
 }
 ?>
-

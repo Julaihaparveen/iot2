@@ -1,66 +1,90 @@
 <?php
 session_start();
-require 'config.php';
-
-$error = '';
-
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $username = trim($_POST['username'] ?? '');
-    $password = trim($_POST['password'] ?? '');
-
-    if (empty($username) || empty($password)) {
-        $error = "Please enter both username and password.";
+include 'config.php';
+ 
+// Handle Registration
+if (isset($_POST['signup'])) {
+    $name = $_POST['signup_name'];
+    $email = $_POST['signup_email'];
+    $password = password_hash($_POST['signup_password'], PASSWORD_DEFAULT);
+ 
+    $query = "INSERT INTO users (name, email, password) VALUES ($1, $2, $3)";
+    $result = pg_query_params($conn, $query, [$name, $email, $password]);
+ 
+    if ($result) {
+        $signup_msg = "✅ Registration successful! Please log in.";
     } else {
-        // Prepare and execute query
-        $stmt = $pdo->prepare("SELECT * FROM login_users WHERE username = :username");
-        $stmt->execute(['username' => $username]);
-        $user = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        if ($user && password_verify($password, $user['password_hash'])) {
-            $_SESSION['user_id'] = $user['id'];
-            $_SESSION['username'] = $user['username'];
-            header("Location: dashboard.php");
-            exit;
-        } else {
-            $error = "Invalid username or password.";
-        }
+        $signup_msg = "❌ Registration failed. Email may already exist.";
+    }
+}
+ 
+// Handle Login
+if (isset($_POST['login'])) {
+    $email = $_POST['login_email'];
+    $password = $_POST['login_password'];
+ 
+    $query = "SELECT * FROM users WHERE email = $1";
+    $result = pg_query_params($conn, $query, [$email]);
+    $user = pg_fetch_assoc($result);
+ 
+    if ($user && password_verify($password, $user['password'])) {
+        $_SESSION['user'] = $user['name'];
+        header("Location: dashboard.php");
+        exit;
+    } else {
+        $login_msg = "❌ Invalid email or password.";
     }
 }
 ?>
-
+ 
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Login</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+    <meta charset="UTF-8">
+    <title>Login / Signup - OpenSenseMap Viewer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-100 flex items-center justify-center min-h-screen">
-  <div class="bg-white p-8 rounded shadow-md w-full max-w-md">
-    <h2 class="text-2xl font-bold mb-6 text-center">Login</h2>
-
-    <?php if ($error): ?>
-      <p class="text-red-500 mb-4 text-center"><?= htmlspecialchars($error) ?></p>
-    <?php endif; ?>
-
-    <form method="POST" action="login.php" class="space-y-4">
-      <div>
-        <label for="username" class="block font-semibold mb-1">Username</label>
-        <input type="text" name="username" id="username" class="w-full border px-3 py-2 rounded" required>
-      </div>
-      <div>
-        <label for="password" class="block font-semibold mb-1">Password</label>
-        <input type="password" name="password" id="password" class="w-full border px-3 py-2 rounded" required>
-      </div>
-      <button type="submit" class="w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600">Login</button>
-    </form>
-
-    <p class="mt-4 text-center">
-      Don't have an account?
-      <a href="signup.php" class="text-blue-600 hover:underline">Sign Up</a>
-    </p>
-  </div>
+ 
+<div class="w-full max-w-4xl bg-white shadow-lg rounded-lg overflow-hidden grid grid-cols-1 md:grid-cols-2">
+    <!-- Login Form -->
+    <div class="p-8">
+        <h2 class="text-2xl font-bold mb-4 text-gray-800">Login</h2>
+ 
+        <?php if (!empty($login_msg)) echo "<p class='text-red-600 mb-2'>$login_msg</p>"; ?>
+ 
+        <form method="post" class="space-y-4">
+            <input type="email" name="login_email" placeholder="Email"
+                   required class="w-full px-4 py-2 border rounded-md">
+            <input type="password" name="login_password" placeholder="Password"
+                   required class="w-full px-4 py-2 border rounded-md">
+            <button type="submit" name="login"
+                    class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded">
+                Login
+            </button>
+        </form>
+    </div>
+ 
+    <!-- Signup Form -->
+    <div class="p-8 bg-gray-50">
+        <h2 class="text-2xl font-bold mb-4 text-gray-800">Sign Up</h2>
+ 
+        <?php if (!empty($signup_msg)) echo "<p class='text-green-600 mb-2'>$signup_msg</p>"; ?>
+ 
+        <form method="post" class="space-y-4">
+            <input type="text" name="signup_name" placeholder="Full Name"
+                   required class="w-full px-4 py-2 border rounded-md">
+            <input type="email" name="signup_email" placeholder="Email"
+                   required class="w-full px-4 py-2 border rounded-md">
+            <input type="password" name="signup_password" placeholder="Password"
+                   required class="w-full px-4 py-2 border rounded-md">
+            <button type="submit" name="signup"
+                    class="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded">
+                Sign Up
+            </button>
+        </form>
+    </div>
+</div>
+ 
 </body>
 </html>
-
-
