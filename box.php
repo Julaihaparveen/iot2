@@ -1,216 +1,158 @@
 <?php
+$boxId = '65652ae82d58f70008baaa76';
+$url   = "https://api.opensensemap.org/boxes/{$boxId}";
+$json  = @file_get_contents($url);
+$data  = $json ? json_decode($json, true) : null;
 
-// box.php
- 
-// 1. Fetch JSON via cURL with basic error handling
-
-function getJson(string $url): ?array {
-
-    $ch = curl_init($url);
-
-    curl_setopt_array($ch, [
-
-        CURLOPT_RETURNTRANSFER => true,
-
-        CURLOPT_FAILONERROR    => true,
-
-        CURLOPT_CONNECTTIMEOUT => 5,
-
-        CURLOPT_TIMEOUT        => 10,
-
-    ]);
-
-    $resp = curl_exec($ch);
-
-    if ($resp === false) {
-
-        curl_close($ch);
-
-        return null;
-
-    }
-
-    curl_close($ch);
-
-    $data = json_decode($resp, true);
-
-    return (json_last_error() === JSON_ERROR_NONE) ? $data : null;
-
+$name = $data['name'] ?? 'Unknown';
+$description = $data['description'] ?? 'No description';
+$lat  = 0;
+$lon  = 0;
+if (!empty($data['currentLocation']['coordinates'])) {
+    list($lon, $lat) = $data['currentLocation']['coordinates'];
+} elseif (!empty($data['currentLocation']['geometry']['coordinates'])) {
+    list($lon, $lat) = $data['currentLocation']['geometry']['coordinates'];
 }
- 
-$url  = "https://api.opensensemap.org/boxes/65652ae82d58f70008baaa76";
-
-$data = getJson($url);
-
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>OpenSenseMap Box Details</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<style>
-
-    body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }
-
-    .section { background: #fff; border: 1px solid #ccc; margin-bottom: 20px; padding: 15px; border-radius: 8px; }
-
-    #map { height: 400px; width: 100%; border-radius: 8px; }
-
-    #timer { font-size: 18px; color: red; margin-bottom: 10px; }
-</style>
-</head>
-<body>
- 
-  <?php include 'menu.php'; ?>
- 
-  <h2>OpenSenseMap Box Full Information</h2>
-<div id="timer">Next update in: <span id="countdown">15</span>s</div>
- 
-  <?php if (!$data): ?>
-<p style="color:red;">Could not retrieve or parse the OpenSenseMap API data.</p>
-<?php else: ?>
-<div class="section" id="generalInfo">
-<h3>General Information</h3>
-<p><strong>Box ID:</strong>   <span id="boxId"><?= htmlspecialchars($data['_id']) ?></span></p>
-<p><strong>Name:</strong>     <span id="boxName"><?= htmlspecialchars($data['name']) ?></span></p>
-<p><strong>Description:</strong> <span id="boxDesc"><?= htmlspecialchars($data['description'] ?? 'N/A') ?></span></p>
-<!-- add more fields as needed, each wrapped in a span with its own ID -->
-</div>
- 
-    <div class="section" id="location">
-<h3>Location</h3>
-<p><strong>Latitude:</strong>  <span id="lat"><?= htmlspecialchars($data['geolocation']['coordinates'][1] ?? 0) ?></span></p>
-<p><strong>Longitude:</strong> <span id="lon"><?= htmlspecialchars($data['geolocation']['coordinates'][0] ?? 0) ?></span></p>
-</div>
- 
-    <div id="map"></div>
-<?php endif; ?>
- 
+  <meta charset="UTF-8" />
+  <title>SenseBox Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script>
-<?php if ($data): ?>
+</head>
+<body class="bg-gray-50 text-gray-800 p-6">
+  <div class="max-w-4xl mx-auto space-y-6">
+    <header class="text-center">
+      <h1 class="text-4xl font-bold">SenseBox Dashboard</h1>
+      <p class="text-sm text-gray-500 mt-2">Auto-refreshes in <span id="timer" class="font-semibold text-blue-600">15</span> seconds</p>
+    </header>
 
-    // --- INITIAL SETUP ---
+    <section id="boxContent">
+      <?php if (!$data): ?>
+        <div class="p-4 bg-red-100 text-red-700 rounded">
+          Error: Could not load box data.
+        </div>
+      <?php else: ?>
+        <section class="bg-white shadow rounded-lg p-6">
+          <h2 class="text-2xl font-semibold mb-4">General Information</h2>
+          <dl class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 text-sm">
+            <div>
+              <dt class="font-medium">Box ID</dt>
+              <dd id="boxId"><?= htmlspecialchars($data['_id']) ?></dd>
+            </div>
+            <div>
+              <dt class="font-medium">Name</dt>
+              <dd id="boxName"><?= htmlspecialchars($name) ?></dd>
+            </div>
+            <div class="md:col-span-2">
+              <dt class="font-medium">Description</dt>
+              <dd id="boxDesc"><?= htmlspecialchars($description) ?></dd>
+            </div>
+          </dl>
+        </section>
 
-    const latSpan = document.getElementById('lat');
+        <section class="bg-white shadow rounded-lg p-6">
+          <h2 class="text-2xl font-semibold mb-4">Location</h2>
+          <p class="text-sm mb-4">
+            Latitude: <span id="lat" class="font-medium"><?= htmlspecialchars($lat) ?></span><br>
+            Longitude: <span id="lon" class="font-medium"><?= htmlspecialchars($lon) ?></span>
+          </p>
+          <div id="map" class="h-80 rounded-lg"></div>
+        </section>
 
-    const lonSpan = document.getElementById('lon');
+        <?php if (!empty($data['sensors'])): ?>
+        <section class="bg-white shadow rounded-lg p-6" id="sensorSection">
+          <h2 class="text-2xl font-semibold mb-4">Sensors</h2>
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="sensorData">
+            <?php foreach ($data['sensors'] as $sensor):
+              $val = $sensor['lastMeasurement']['value'] ?? 'N/A';
+              $unit = $sensor['unit'] ?? '';
+              $title = $sensor['title'] ?? 'Sensor';
+            ?>
+              <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 shadow-sm">
+                <h3 class="text-lg font-medium"><?= htmlspecialchars($title) ?></h3>
+                <p class="mt-2 text-2xl font-bold text-blue-600">
+                  <?= htmlspecialchars($val) ?> <?= htmlspecialchars($unit) ?>
+                </p>
+              </div>
+            <?php endforeach; ?>
+          </div>
+        </section>
+        <?php endif; ?>
+      <?php endif; ?>
+    </section>
+  </div>
 
-    const boxId   = document.getElementById('boxId');
+  <script>
+    let map;
+    const boxId = <?= json_encode($boxId) ?>;
 
-    const boxName = document.getElementById('boxName');
+    function initMap(lat, lon, name) {
+      map = L.map('map').setView([lat, lon], 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(map);
+      L.marker([lat, lon]).addTo(map).bindPopup(name).openPopup();
+    }
 
-    const boxDesc = document.getElementById('boxDesc');
- 
-    // Parse initial coords (or 0 if missing)
+    function updateMap(lat, lon, name) {
+      map.setView([lat, lon], 13);
+      L.marker([lat, lon]).addTo(map).bindPopup(name).openPopup();
+    }
 
-    let lat = parseFloat(latSpan.textContent) || 0;
+    function fetchData() {
+      fetch(`https://api.opensensemap.org/boxes/${boxId}`)
+        .then(res => res.json())
+        .then(data => {
+          document.getElementById("boxId").textContent = data._id;
+          document.getElementById("boxName").textContent = data.name || "Unknown";
+          document.getElementById("boxDesc").textContent = data.description || "No description";
 
-    let lon = parseFloat(lonSpan.textContent) || 0;
- 
-    // Initialize Leaflet map and marker
+          const coords = data.currentLocation?.coordinates || [0, 0];
+          const lat = coords[1];
+          const lon = coords[0];
 
-    const map = L.map('map').setView([lat, lon], 13);
+          document.getElementById("lat").textContent = lat;
+          document.getElementById("lon").textContent = lon;
+          updateMap(lat, lon, data.name);
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          // Update sensors
+          const sensorData = data.sensors.map(sensor => {
+            const val = sensor.lastMeasurement?.value || 'N/A';
+            const unit = sensor.unit || '';
+            const title = sensor.title || 'Sensor';
+            return `
+              <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 shadow-sm">
+                <h3 class="text-lg font-medium">${title}</h3>
+                <p class="mt-2 text-2xl font-bold text-blue-600">${val} ${unit}</p>
+              </div>
+            `;
+          }).join('');
+          document.getElementById("sensorData").innerHTML = sensorData;
+        })
+        .catch(err => console.error('Error fetching data:', err));
+    }
 
-      attribution: '&copy; OpenStreetMap contributors'
-
-    }).addTo(map);
-
-    const marker = L.marker([lat, lon]).addTo(map);
- 
-    // Countdown + refresh logic
-
+    // Countdown Timer
     let countdown = 15;
-
-    const countdownEl = document.getElementById('countdown');
-
-    let timerId;
- 
-    function updateTimer() {
-
-      countdownEl.textContent = countdown;
-
-      if (countdown <= 0) {
-
-        clearInterval(timerId);
-
-        fetchBoxData();
-
-      }
-
+    const timerEl = document.getElementById('timer');
+    setInterval(() => {
       countdown--;
+      if (countdown <= 0) {
+        fetchData();
+        countdown = 15;
+      }
+      timerEl.textContent = countdown;
+    }, 1000);
 
-    }
- 
-    function startTimer() {
-
-      countdown = 15;
-
-      clearInterval(timerId);
-
-      updateTimer();
-
-      timerId = setInterval(updateTimer, 1000);
-
-    }
- 
-    // Fetch fresh JSON from the API and update only the DOM + marker
-
-    function fetchBoxData() {
-
-      fetch('<?= $url ?>')
-
-        .then(res => {
-
-          if (!res.ok) throw new Error('Network response was not ok');
-
-          return res.json();
-
-        })
-
-        .then(json => {
-
-          // text fields
-
-          boxId.textContent   = json._id   || 'N/A';
-
-          boxName.textContent = json.name  || 'N/A';
-
-          boxDesc.textContent = json.description || 'N/A';
- 
-          // location
-
-          if (json.geolocation?.coordinates) {
-
-            const [newLon, newLat] = json.geolocation.coordinates;
-
-            latSpan.textContent = newLat;
-
-            lonSpan.textContent = newLon;
-
-            marker.setLatLng([newLat, newLon]);
-
-            map.setView([newLat, newLon]);
-
-          }
-
-        })
-
-        .catch(err => console.error('Fetch error:', err))
-
-        .finally(startTimer);
-
-    }
- 
-    // Kick everything off
-
-    window.addEventListener('load', startTimer);
-<?php endif; ?>
-</script>
- 
+    // Initialize map on load
+    document.addEventListener('DOMContentLoaded', () => {
+      initMap(<?= json_encode($lat) ?>, <?= json_encode($lon) ?>, <?= json_encode($name) ?>);
+    });
+  </script>
 </body>
 </html>
 
